@@ -527,3 +527,18 @@ class Tacotron2(nn.Module):
             [mel_outputs, mel_outputs_postnet, gate_outputs, alignments])
 
         return outputs
+
+if __name__ == "__main__":
+    from hparams import create_hparams
+    hparams = create_hparams()
+    model = Tacotron2(hparams)
+
+    text_padded = torch.LongTensor(3,72).zero_()
+    input_lengths = torch.LongTensor([72, 67, 56])
+    mel_padded = torch.FloatTensor(3, 80, 1000).zero_()
+    max_len = torch.max(input_lengths.data).item()
+    output_lengths = torch.LongTensor([800, 900, 1000])
+    
+    x = (text_padded, input_lengths, mel_padded, max_len, output_lengths)
+    with torch.no_grad():
+        y_pred = model(x)
