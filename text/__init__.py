@@ -1,9 +1,10 @@
 import numpy as np
-import re
+import re,os
 
-phonemes = np.loadtxt('phonemes.lst','str')
+thisfile_pwd = os.path.dirname(os.path.abspath(__file__))
+phonemes = np.loadtxt(os.path.join(thisfile_pwd, 'phoneme.lst'),'str')
 tones    = ['3', '1', '0', 'XX', '2', '4', '7', '6', '9', '8']
-phone2id = {ph:i for i,ph in enumerate(phone_set)}
+phone2id = {ph:i for i,ph in enumerate(phonemes)}
 tone2id  = {'XX':0, 
             '0' :6,
             '1' :1, 

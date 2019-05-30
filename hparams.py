@@ -1,5 +1,5 @@
 import tensorflow as tf
-from text import symbols
+from text import phonemes, tones
 
 
 def create_hparams(hparams_string=None, verbose=False):
@@ -44,8 +44,10 @@ def create_hparams(hparams_string=None, verbose=False):
         ################################
         # Model Parameters             #
         ################################
-        n_symbols=len(symbols),
-        symbols_embedding_dim=512,
+        n_symbols_phoneme=len(phonemes),#62 512*62/70=453
+        symbols_phoneme_embedding_dim=453,
+        n_symbols_tone=len(tones),#70       512-453=59
+        symbols_tone_embedding_dim=59,
 
         # Encoder parameters
         encoder_kernel_size=5,
