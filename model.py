@@ -532,8 +532,8 @@ class Tacotron2(nn.Module):
         text_inputs, text_lengths, mels, max_len, output_lengths = inputs
         text_lengths, output_lengths = text_lengths.data, output_lengths.data
 
-        embedded_inputs_phoneme = self.embedding_phoneme(text_inputs[0]).transpose(1, 2)
-        embedded_inputs_tone = self.embedding_tone(text_inputs[1]).transpose(1, 2)
+        embedded_inputs_phoneme = self.embedding_phoneme(text_inputs[:,:,0]).transpose(1, 2)
+        embedded_inputs_tone = self.embedding_tone(text_inputs[:,:,1]).transpose(1, 2)
         embedded_inputs = torch.cat((embedded_inputs_phoneme, embedded_inputs_tone), 1)
 
         encoder_outputs = self.encoder(embedded_inputs, text_lengths)
@@ -549,8 +549,8 @@ class Tacotron2(nn.Module):
             output_lengths)
 
     def inference(self, inputs):
-        embedded_inputs_phoneme = self.embedding_phoneme(inputs[0]).transpose(1, 2)
-        embedded_inputs_tone = self.embedding_tone(inputs[1]).transpose(1, 2)
+        embedded_inputs_phoneme = self.embedding_phoneme(inputs[:,:,0]).transpose(1, 2)
+        embedded_inputs_tone = self.embedding_tone(inputs[:,:,1]).transpose(1, 2)
         embedded_inputs = torch.cat((embedded_inputs_phoneme, embedded_inputs_tone), 1)
         encoder_outputs = self.encoder.inference(embedded_inputs)
         mel_outputs, gate_outputs, alignments = self.decoder.inference(
@@ -569,7 +569,7 @@ if __name__ == "__main__":
     hparams = create_hparams()
     model = Tacotron2(hparams)
 
-    text_padded = torch.LongTensor(2,3,72).zero_() #包含音素和音调两类
+    text_padded = torch.LongTensor(3,72,2).zero_() #包含音素和音调两类
     input_lengths = torch.LongTensor([72, 67, 56])
     mel_padded = torch.FloatTensor(3, 80, 1000).zero_()
     max_len = torch.max(input_lengths.data).item()

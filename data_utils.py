@@ -113,6 +113,8 @@ if __name__ == "__main__":
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
+    from model import Tacotron2
+    from loss_function import Tacotron2Loss
     hparams = create_hparams()
     text_loader = TextMelLoader(hparams.training_files, hparams)
     collate_fn = TextMelCollate(hparams.n_frames_per_step)
@@ -125,6 +127,14 @@ if __name__ == "__main__":
                               batch_size=2, pin_memory=False,
                               drop_last=True, collate_fn=collate_fn)
 
+    tacotron = Tacotron2(hparams)
+    criterion = Tacotron2Loss()
     for batch in train_loader:
-        print(batch)
+        text_padded, input_lengths, mel_padded, gate_padded, \
+            output_lengths = batch
+        max_len = torch.max(input_lengths.data).item()
+        x = (text_padded, input_lengths, mel_padded, max_len, output_lengths)
+        y = (mel_padded, gate_padded)
+        y_pred = tacotron(x)
+        print(criterion(y_pred, y))
         break
