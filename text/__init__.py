@@ -1,8 +1,7 @@
 import numpy as np
 import re,os
 
-thisfile_pwd = os.path.dirname(os.path.abspath(__file__))
-phonemes = np.loadtxt(os.path.join(thisfile_pwd, 'phoneme.lst'),'str')
+phonemes = np.loadtxt('text/phoneme.lst','str')
 tones    = range(8) #八种音调
 phoneme2id = {ph:i for i,ph in enumerate(phonemes)}
 tone2id  = {'0'   : 0, # 轻声
