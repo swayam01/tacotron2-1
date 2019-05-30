@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+# 注释是注释下面一行代码
 from math import sqrt
 import torch
 from torch.autograd import Variable
@@ -11,6 +13,7 @@ class LocationLayer(nn.Module):
     def __init__(self, attention_n_filters, attention_kernel_size,
                  attention_dim):
         super(LocationLayer, self).__init__()
+        # attention_kernel_size是31
         padding = int((attention_kernel_size - 1) / 2)
         self.location_conv = ConvNorm(2, attention_n_filters,
                                       kernel_size=attention_kernel_size,
@@ -20,9 +23,12 @@ class LocationLayer(nn.Module):
                                          bias=False, w_init_gain='tanh')
 
     def forward(self, attention_weights_cat):
+        # attention_weights_cat.shape (B,2,72)
+        # processed_attention (3,32,72)
         processed_attention = self.location_conv(attention_weights_cat)
         processed_attention = processed_attention.transpose(1, 2)
         processed_attention = self.location_dense(processed_attention)
+        #processed_attention (3,72,128)
         return processed_attention
 
 
@@ -30,14 +36,19 @@ class Attention(nn.Module):
     def __init__(self, attention_rnn_dim, embedding_dim, attention_dim,
                  attention_location_n_filters, attention_location_kernel_size):
         super(Attention, self).__init__()
+        # 传统attention需要query和keys做线性变换再v^T.*tanh(W * query + V * keys)
+        # 这个query_layer和memory_layer分别得到 W * query 和 V * keys
+        # w_init_gain='tanh'是因为他们包在tanh(W * query + V * keys)函数中吧
         self.query_layer = LinearNorm(attention_rnn_dim, attention_dim,
                                       bias=False, w_init_gain='tanh')
         self.memory_layer = LinearNorm(embedding_dim, attention_dim, bias=False,
-                                       w_init_gain='tanh')
-        self.v = LinearNorm(attention_dim, 1, bias=False)
+                                      w_init_gain='tanh')
+        # 当前attention除了传统参数还包括对注意力权重做卷积处理
         self.location_layer = LocationLayer(attention_location_n_filters,
                                             attention_location_kernel_size,
                                             attention_dim)
+        self.v = LinearNorm(attention_dim, 1, bias=False)
+
         self.score_mask_value = -float("inf")
 
     def get_alignment_energies(self, query, processed_memory,
@@ -45,7 +56,7 @@ class Attention(nn.Module):
         """
         PARAMS
         ------
-        query: decoder output (batch, n_mel_channels * n_frames_per_step)
+        query: decoder output (batch, attention_rnn_dim)
         processed_memory: processed encoder outputs (B, T_in, attention_dim)
         attention_weights_cat: cumulative and prev. att weights (B, 2, max_time)
 
@@ -53,12 +64,14 @@ class Attention(nn.Module):
         -------
         alignment (batch, max_time)
         """
-
         processed_query = self.query_layer(query.unsqueeze(1))
         processed_attention_weights = self.location_layer(attention_weights_cat)
+        # processed_query经广播机制与processed_attention_weights和processed_memory相加
+        # processed_attention_weights这个注意力权重是和加性attention不一样的地方
+        # energies (3,72,1)
         energies = self.v(torch.tanh(
             processed_query + processed_attention_weights + processed_memory))
-
+        # energies (3,72)
         energies = energies.squeeze(-1)
         return energies
 
@@ -67,12 +80,14 @@ class Attention(nn.Module):
         """
         PARAMS
         ------
-        attention_hidden_state: attention rnn last output
-        memory: encoder outputs
+        attention_hidden_state: attention rnn last output     query
+        memory: encoder outputs                               keys
         processed_memory: processed encoder outputs
         attention_weights_cat: previous and cummulative attention weights
-        mask: binary mask for padded data
+        mask: binary mask for padded text data
         """
+
+        #get_alignment_energies即得到注意力权重alpha
         alignment = self.get_alignment_energies(
             attention_hidden_state, processed_memory, attention_weights_cat)
 
@@ -80,9 +95,10 @@ class Attention(nn.Module):
             alignment.data.masked_fill_(mask, self.score_mask_value)
 
         attention_weights = F.softmax(alignment, dim=1)
+        # bmm -> batch matrix multiply
         attention_context = torch.bmm(attention_weights.unsqueeze(1), memory)
         attention_context = attention_context.squeeze(1)
-
+        # attention_context (3,512) attention_context (3,72)
         return attention_context, attention_weights
 
 
@@ -277,6 +293,9 @@ class Decoder(nn.Module):
         self.decoder_cell = Variable(memory.data.new(
             B, self.decoder_rnn_dim).zero_())
 
+        # MAX_TIME在不同batch是不一样的，这意味着attention_weights和attention_weights_cum维度可变
+        # 也就是说它们俩不是可供网络学习的参数，而是随着attention注意力时间的不同而计算的值，只适用于当前batch
+        # 类似于attention_context也不是网络学习的参数
         self.attention_weights = Variable(memory.data.new(
             B, MAX_TIME).zero_())
         self.attention_weights_cum = Variable(memory.data.new(
@@ -352,6 +371,7 @@ class Decoder(nn.Module):
         cell_input = torch.cat((decoder_input, self.attention_context), -1)
         self.attention_hidden, self.attention_cell = self.attention_rnn(
             cell_input, (self.attention_hidden, self.attention_cell))
+        #只dropout了h状态 因为h代表了LSTM短时的特征（不稳定），可能需要dropout对其进行鲁棒化
         self.attention_hidden = F.dropout(
             self.attention_hidden, self.p_attention_dropout, self.training)
 
@@ -403,6 +423,7 @@ class Decoder(nn.Module):
 
         mel_outputs, gate_outputs, alignments = [], [], []
         while len(mel_outputs) < decoder_inputs.size(0) - 1:
+            # decoder_input (B,prenet_dim)
             decoder_input = decoder_inputs[len(mel_outputs)]
             mel_output, gate_output, attention_weights = self.decode(
                 decoder_input)
