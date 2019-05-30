@@ -304,6 +304,7 @@ class Decoder(nn.Module):
             B, self.encoder_embedding_dim).zero_())
 
         self.memory = memory
+        # 对memory做线性变换以便成为attention的输入
         self.processed_memory = self.attention_layer.memory_layer(memory)
         self.mask = mask
 
@@ -347,6 +348,8 @@ class Decoder(nn.Module):
         gate_outputs = torch.stack(gate_outputs).transpose(0, 1)
         gate_outputs = gate_outputs.contiguous()
         # (T_out, B, n_mel_channels) -> (B, T_out, n_mel_channels)
+        # view只能用在contiguous的variable上
+        # 如果在view之前用了transpose, permute等，需要用contiguous()来返回一个连续分配的内存形式
         mel_outputs = torch.stack(mel_outputs).transpose(0, 1).contiguous()
         # decouple frames per step
         mel_outputs = mel_outputs.view(
@@ -561,5 +564,4 @@ if __name__ == "__main__":
     output_lengths = torch.LongTensor([800, 900, 1000])
     
     x = (text_padded, input_lengths, mel_padded, max_len, output_lengths)
-    with torch.no_grad():
-        y_pred = model(x)
+    y_pred = model(x)
