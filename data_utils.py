@@ -4,7 +4,7 @@ import torch
 import torch.utils.data
 
 import layers
-from utils import load_wav_to_torch, load_filepaths_and_text
+from utils import load_wav_to_torch, load_filepaths
 from text import text_to_sequence
 
 
@@ -15,8 +15,7 @@ class TextMelLoader(torch.utils.data.Dataset):
         3) computes mel-spectrograms from audio files.
     """
     def __init__(self, audiopaths_and_text, hparams):
-        self.audiopaths_and_text = load_filepaths_and_text(audiopaths_and_text)
-        self.text_cleaners = hparams.text_cleaners
+        self.audiopaths_and_text = load_filepaths(audiopaths_and_text)
         self.max_wav_value = hparams.max_wav_value
         self.sampling_rate = hparams.sampling_rate
         self.load_mel_from_disk = hparams.load_mel_from_disk
@@ -27,11 +26,10 @@ class TextMelLoader(torch.utils.data.Dataset):
         random.seed(1234)
         random.shuffle(self.audiopaths_and_text)
 
-    def get_mel_text_pair(self, audiopath_and_text):
+    def get_mel_text_pair(self, file_basename):
         # separate filename and text
-        audiopath, text = audiopath_and_text[0], audiopath_and_text[1]
-        text = self.get_text(text)
-        mel = self.get_mel(audiopath)
+        text = self.get_text(file_basename)
+        mel = self.get_mel(file_basename)
         return (text, mel)
 
     def get_mel(self, filename):
@@ -50,11 +48,10 @@ class TextMelLoader(torch.utils.data.Dataset):
             assert melspec.size(0) == self.stft.n_mel_channels, (
                 'Mel dimension mismatch: given {}, expected {}'.format(
                     melspec.size(0), self.stft.n_mel_channels))
-
         return melspec
 
-    def get_text(self, text):
-        text_norm = torch.IntTensor(text_to_sequence(text))
+    def get_text(self, filename):
+        text_norm = torch.IntTensor(text_to_sequence(filename))
         return text_norm
 
     def __getitem__(self, index):
@@ -82,11 +79,12 @@ class TextMelCollate():
             dim=0, descending=True)
         max_input_len = input_lengths[0]
 
-        text_padded = torch.LongTensor(len(batch), max_input_len)
+        # text_padded包括音素和音调
+        text_padded = torch.LongTensor(len(batch), max_input_len, 2)
         text_padded.zero_()
         for i in range(len(ids_sorted_decreasing)):
             text = batch[ids_sorted_decreasing[i]][0]
-            text_padded[i, :text.size(0)] = text
+            text_padded[i, :text.size(0), :] = text
 
         # Right zero-pad mel-spec
         num_mels = batch[0][1].size(0)
@@ -109,3 +107,24 @@ class TextMelCollate():
 
         return text_padded, input_lengths, mel_padded, gate_padded, \
             output_lengths
+
+if __name__ == "__main__":
+    from hparams import create_hparams
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    hparams = create_hparams()
+    text_loader = TextMelLoader(hparams.training_files, hparams)
+    collate_fn = TextMelCollate(hparams.n_frames_per_step)
+
+    text, mel = text_loader[0] # mel.shape (80 * frame_num)
+    plt.matshow(mel, origin='lower')
+    plt.colorbar()
+    plt.savefig('mel_demo.png')
+    train_loader = torch.utils.data.DataLoader(text_loader, num_workers=1, shuffle=False,
+                              batch_size=2, pin_memory=False,
+                              drop_last=True, collate_fn=collate_fn)
+
+    for batch in train_loader:
+        print(batch)
+        break
