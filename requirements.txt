@@ -4,6 +4,6 @@ numpy
 inflect
 librosa
 scipy
-tensorboardX
+tensorboardX==1.1
 Unidecode
 pillow
