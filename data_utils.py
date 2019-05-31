@@ -146,4 +146,3 @@ if __name__ == "__main__":
         y_pred = tacotron(x)
         print(criterion(y_pred, y))
         break
-    
