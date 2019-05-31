@@ -3,10 +3,9 @@ import numpy as np
 import torch
 import torch.utils.data
 
-import layers
+import layers,os
 from utils import load_wav_to_torch, load_filepaths
 from text import text_to_sequence
-
 
 class TextMelLoader(torch.utils.data.Dataset):
     """
@@ -19,10 +18,12 @@ class TextMelLoader(torch.utils.data.Dataset):
         self.max_wav_value = hparams.max_wav_value
         self.sampling_rate = hparams.sampling_rate
         self.load_mel_from_disk = hparams.load_mel_from_disk
+        self.n_mel_channels = hparams.n_mel_channels
         self.stft = layers.TacotronSTFT(
             hparams.filter_length, hparams.hop_length, hparams.win_length,
             hparams.n_mel_channels, hparams.sampling_rate, hparams.mel_fmin,
             hparams.mel_fmax)
+        self.mean_std_mel = hparams.mean_std_mel
         random.seed(1234)
         random.shuffle(self.audiopaths_and_text)
 
@@ -34,7 +35,7 @@ class TextMelLoader(torch.utils.data.Dataset):
 
     def get_mel(self, filename):
         if not self.load_mel_from_disk:
-            audio, sampling_rate = load_wav_to_torch(filename)
+            audio, sampling_rate = load_wav_to_torch(os.path.join(hparams.audio_dir, filename+'.npy'))
             if sampling_rate != self.stft.sampling_rate:
                 raise ValueError("{} {} SR doesn't match target {} SR".format(
                     sampling_rate, self.stft.sampling_rate))
@@ -44,14 +45,18 @@ class TextMelLoader(torch.utils.data.Dataset):
             melspec = self.stft.mel_spectrogram(audio_norm)
             melspec = torch.squeeze(melspec, 0)
         else:
-            melspec = torch.from_numpy(np.load(filename))
+            melspec = np.load(os.path.join(hparams.mel_dir, filename+'.npy'))
+            mean, std = np.load(self.mean_std_mel)
+            melspec = (melspec-mean)/std
+            melspec = torch.from_numpy(np.transpose(melspec))
             assert melspec.size(0) == self.stft.n_mel_channels, (
                 'Mel dimension mismatch: given {}, expected {}'.format(
                     melspec.size(0), self.stft.n_mel_channels))
         return melspec
 
     def get_text(self, filename):
-        text_norm = torch.IntTensor(text_to_sequence(filename))
+        file_path = os.path.join(hparams.text_dir, filename+'.lab')
+        text_norm = torch.IntTensor(text_to_sequence(file_path))
         return text_norm
 
     def __getitem__(self, index):
@@ -123,9 +128,12 @@ if __name__ == "__main__":
     plt.matshow(mel, origin='lower')
     plt.colorbar()
     plt.savefig('mel_demo.png')
-    train_loader = torch.utils.data.DataLoader(text_loader, num_workers=1, shuffle=False,
-                              batch_size=2, pin_memory=False,
-                              drop_last=True, collate_fn=collate_fn)
+    
+    train_loader = torch.utils.data.DataLoader(
+                            text_loader, 
+                            num_workers=1,  shuffle=False,
+                            batch_size=2,   pin_memory=False,
+                            drop_last=True, collate_fn=collate_fn)
 
     tacotron = Tacotron2(hparams)
     criterion = Tacotron2Loss()
@@ -138,3 +146,4 @@ if __name__ == "__main__":
         y_pred = tacotron(x)
         print(criterion(y_pred, y))
         break
+    

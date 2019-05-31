@@ -13,8 +13,8 @@ def get_mask_from_lengths(lengths):
     return mask
 
 
-def load_wav_to_torch(filename):
-    sampling_rate, data = read(os.path.join('data/audio', filename+'.wav'))
+def load_wav_to_torch(absolute_path):
+    sampling_rate, data = read(absolute_path)
     return torch.FloatTensor(data.astype(np.float32)), sampling_rate
 
 

@@ -24,9 +24,13 @@ def create_hparams(hparams_string=None, verbose=False):
         ################################
         # Data Parameters             #
         ################################
-        load_mel_from_disk=False,
-        training_files='filelists/audio_text_train_filelist.txt',
-        validation_files='filelists/audio_text_val_filelist.txt',
+        load_mel_from_disk=True,
+        training_files='filelists/audio_text_train_filelist.lst',
+        validation_files='filelists/audio_text_val_filelist.lst',
+        text_dir     = 'data/fulllab',
+        audio_dir    = 'data/audio',
+        mel_dir      = 'data/mel',
+        mean_std_mel = 'data/MeanStd_Tacotron_mel.npy',
 
         ################################
         # Audio Parameters             #
@@ -43,10 +47,10 @@ def create_hparams(hparams_string=None, verbose=False):
         ################################
         # Model Parameters             #
         ################################
-        n_symbols_phoneme=len(phonemes),#62 512*62/70=453
-        symbols_phoneme_embedding_dim=453,
-        n_symbols_tone=len(tones),#70       512-453=59
-        symbols_tone_embedding_dim=59,
+        n_symbols_phoneme=len(phonemes),  # 61 512*61/69=452.63
+        symbols_phoneme_embedding_dim=452,
+        n_symbols_tone=len(tones),        # 8  512*8/69=59.36
+        symbols_tone_embedding_dim=60,
 
         # Encoder parameters
         encoder_kernel_size=5,
