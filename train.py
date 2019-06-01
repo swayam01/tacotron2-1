@@ -3,6 +3,7 @@ import time
 import argparse
 import math
 from numpy import finfo
+from tqdm import tqdm
 
 import torch
 from distributed import apply_gradient_allreduce
@@ -129,7 +130,7 @@ def validate(model, criterion, valset, iteration, batch_size, n_gpus,
                                 pin_memory=False, collate_fn=collate_fn)
 
         val_loss = 0.0
-        for i, batch in enumerate(val_loader):
+        for i, batch in tqdm(enumerate(val_loader), total = len(val_loader)):
             x, y = model.parse_batch(batch)
             y_pred = model(x)
             loss = criterion(y_pred, y)
@@ -142,7 +143,7 @@ def validate(model, criterion, valset, iteration, batch_size, n_gpus,
 
     model.train()
     if rank == 0:
-        print("Validation loss {}: {:9f}  ".format(iteration, reduced_val_loss))
+        tqdm.write("Validation loss {}: {:9f}  ".format(iteration, reduced_val_loss))
         logger.log_validation(reduced_val_loss, model, y, y_pred, iteration)
 
 
@@ -203,9 +204,11 @@ def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
     model.train()
     is_overflow = False
     # ================ MAIN TRAINNIG LOOP! ===================
-    for epoch in range(epoch_offset, hparams.epochs):
-        print("Epoch: {}".format(epoch))
-        for i, batch in enumerate(train_loader):
+    for epoch in tqdm(range(hparams.epochs)):
+        if epoch < epoch_offset:
+        	continue
+        tqdm.write("Epoch: {}".format(epoch))
+        for i, batch in tqdm(enumerate(train_loader), total = len(train_loader)):
             start = time.perf_counter()
             for param_group in optimizer.param_groups:
                 param_group['lr'] = learning_rate
@@ -237,8 +240,8 @@ def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
 
             if not is_overflow and rank == 0:
                 duration = time.perf_counter() - start
-                print("Train loss {} {:.6f} Grad Norm {:.6f} {:.2f}s/it".format(
-                    iteration, reduced_loss, grad_norm, duration))
+                tqdm.write("Epoch: {} Train loss {} {:.6f} Grad Norm {:.6f} {:.2f}s/it".format(
+                    epoch, iteration, reduced_loss, grad_norm, duration))
                 logger.log_training(
                     reduced_loss, grad_norm, learning_rate, duration, iteration)
 

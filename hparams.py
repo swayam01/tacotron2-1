@@ -25,8 +25,8 @@ def create_hparams(hparams_string=None, verbose=False):
         # Data Parameters             #
         ################################
         load_mel_from_disk=True,
-        training_files='filelists/audio_text_train_filelist.lst',
-        validation_files='filelists/audio_text_val_filelist.lst',
+        training_files='filelists/train_file.lst',
+        validation_files='filelists/val_file.lst',
         text_dir     = 'data/fulllab',
         audio_dir    = 'data/audio',
         mel_dir      = 'data/mel',
@@ -86,7 +86,7 @@ def create_hparams(hparams_string=None, verbose=False):
         learning_rate=1e-3,
         weight_decay=1e-6,
         grad_clip_thresh=1.0,
-        batch_size=64,
+        batch_size=32,
         mask_padding=True  # set model's padded outputs to padded values
     )
 
