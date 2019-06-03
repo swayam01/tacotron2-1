@@ -59,7 +59,7 @@ if __name__ == "__main__":
                 hparams.mel_fmax)
 
     if gen_mel:
-        audio_files = sorted(glob('data/audio/*.wav'))
+        audio_files = sorted(glob('audio/*.wav'))
         out_dir = 'mel'
         SaveMkdir(out_dir)
         for file in tqdm(audio_files):
