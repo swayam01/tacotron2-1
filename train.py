@@ -17,14 +17,6 @@ from logger import Tacotron2Logger
 from hparams import create_hparams
 from tqdm import tqdm
 
-def batchnorm_to_float(module):
-    """Converts batch norm modules to FP32"""
-    if isinstance(module, torch.nn.modules.batchnorm._BatchNorm):
-        module.float()
-    for child in module.children():
-        batchnorm_to_float(child)
-    return module
-
 
 def reduce_tensor(tensor, n_gpus):
     rt = tensor.clone()
@@ -86,11 +78,18 @@ def load_model(hparams):
     return model
 
 
-def warm_start_model(checkpoint_path, model):
+def warm_start_model(checkpoint_path, model, ignore_layers):
     assert os.path.isfile(checkpoint_path)
     print("Warm starting model from checkpoint '{}'".format(checkpoint_path))
     checkpoint_dict = torch.load(checkpoint_path, map_location='cpu')
-    model.load_state_dict(checkpoint_dict['state_dict'])
+    model_dict = checkpoint_dict['state_dict']
+    if len(ignore_layers) > 0:
+        model_dict = {k: v for k, v in model_dict.items()
+                      if k not in ignore_layers}
+        dummy_dict = model.state_dict()
+        dummy_dict.update(model_dict)
+        model_dict = dummy_dict
+    model.load_state_dict(model_dict)
     return model
 
 
