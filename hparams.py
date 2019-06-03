@@ -1,5 +1,5 @@
 import tensorflow as tf
-from text import phonemes, tones
+from symbols import phone_set, tone2id
 
 
 def create_hparams(hparams_string=None, verbose=False):
@@ -16,21 +16,20 @@ def create_hparams(hparams_string=None, verbose=False):
         fp16_run=False,
         distributed_run=False,
         dist_backend="nccl",
-        dist_url="tcp://localhost:54321",
+        dist_url="tcp://localhost:54322",
         cudnn_enabled=True,
         cudnn_benchmark=False,
-        ignore_layers=['embedding.weight'],
 
         ################################
-        # Data Parameters             #
+        # Data Parameters              #
         ################################
         load_mel_from_disk=True,
-        training_files='filelists/train_file.lst',
-        validation_files='filelists/val_file.lst',
-        text_dir     = 'data/fulllab',
-        audio_dir    = 'data/audio',
-        mel_dir      = 'data/mel',
-        mean_std_mel = 'data/MeanStd_Tacotron_mel.npy',
+        training_lst='filelists/train_file.lst',
+        validation_lst='filelists/val_file.lst',
+        audio_path='data/audio',
+        mel_path='data/mel',
+        lab_path='data/text',
+        MelStd_mel ='data/MeanStd_Tacotron_mel.npy',
 
         ################################
         # Audio Parameters             #
@@ -42,15 +41,15 @@ def create_hparams(hparams_string=None, verbose=False):
         win_length=1024,
         n_mel_channels=80,
         mel_fmin=0.0,
-        mel_fmax=8000.0,
+        mel_fmax=None,  # if None, half the sampling rate
 
         ################################
         # Model Parameters             #
         ################################
-        n_symbols_phoneme=len(phonemes),  # 61 512*61/69=452.63
-        symbols_phoneme_embedding_dim=452,
-        n_symbols_tone=len(tones),        # 8  512*8/69=59.36
-        symbols_tone_embedding_dim=60,
+        n_symbols_phoneme=61,
+        symbols_embedding_dim_phoneme=452,
+        n_symbols_tone=8,
+        symbols_embedding_dim_tone=60,
 
         # Encoder parameters
         encoder_kernel_size=5,

@@ -1,11 +1,14 @@
-import random
+import random,os
 import numpy as np
 import torch
 import torch.utils.data
 
-import layers,os
-from utils import load_wav_to_torch, load_filepaths
-from text import text_to_sequence
+import layers
+from utils import load_wav_to_torch, load_fbs_and_fb_text_dict
+#from text import text_to_sequence
+from hparams import create_hparams
+from torch.utils.data import DataLoader
+from symbols import phone2id, tone2id
 
 class TextMelLoader(torch.utils.data.Dataset):
     """
@@ -13,60 +16,60 @@ class TextMelLoader(torch.utils.data.Dataset):
         2) normalizes text and converts them to sequences of one-hot vectors
         3) computes mel-spectrograms from audio files.
     """
-    def __init__(self, audiopaths_and_text, hparams):
-        self.audiopaths_and_text = load_filepaths(audiopaths_and_text)
+    def __init__(self, lstfile, hparams):
+        self.fbs, self.fb_text_dict = load_fbs_and_fb_text_dict(
+            lstfile, hparams.lab_path)
         self.max_wav_value = hparams.max_wav_value
         self.sampling_rate = hparams.sampling_rate
         self.load_mel_from_disk = hparams.load_mel_from_disk
-        self.n_mel_channels = hparams.n_mel_channels
+        self.audio_path = hparams.audio_path
+        self.mel_path = hparams.mel_path
+        self.MelStd_mel = hparams.MelStd_mel
         self.stft = layers.TacotronSTFT(
             hparams.filter_length, hparams.hop_length, hparams.win_length,
             hparams.n_mel_channels, hparams.sampling_rate, hparams.mel_fmin,
             hparams.mel_fmax)
-        self.audio_dir = hparams.audio_dir
-        self.mel_dir = hparams.mel_dir
-        self.mean_std_mel = hparams.mean_std_mel
-        self.text_dir = hparams.text_dir
         random.seed(1234)
-        random.shuffle(self.audiopaths_and_text)
+        random.shuffle(self.fbs)
 
-    def get_mel_text_pair(self, file_basename):
+    def get_mel_text_pair(self, fb):
         # separate filename and text
-        text = self.get_text(file_basename)
-        mel = self.get_mel(file_basename)
-        return (text, mel)
+        text = self.get_text(fb)
+        mel = self.get_mel(fb)
+        return text, mel
 
-    def get_mel(self, filename):
+    def get_mel(self, fb):
         if not self.load_mel_from_disk:
-            audio, sampling_rate = load_wav_to_torch(os.path.join(self.audio_dir, filename+'.npy'))
-            if sampling_rate != self.stft.sampling_rate:
-                raise ValueError("{} {} SR doesn't match target {} SR".format(
-                    sampling_rate, self.stft.sampling_rate))
+            cur_audio_path = os.path.join(self.audio_path, fb+'.wav')
+            audio = load_wav_to_torch(cur_audio_path, self.sampling_rate)
             audio_norm = audio / self.max_wav_value
             audio_norm = audio_norm.unsqueeze(0)
             audio_norm = torch.autograd.Variable(audio_norm, requires_grad=False)
             melspec = self.stft.mel_spectrogram(audio_norm)
-            melspec = torch.squeeze(melspec, 0)
+            melspec = torch.squeeze(melspec, 0)  # [mel_bin, T]
         else:
-            melspec = np.load(os.path.join(self.mel_dir, filename+'.npy'))
-            mean, std = np.load(self.mean_std_mel)
-            melspec = (melspec-mean)/std
-            melspec = torch.from_numpy(np.transpose(melspec))
+            cur_mel_path = os.path.join(self.mel_path, fb+'.npy')
+            melspec = np.load(cur_mel_path)
+            mean, std = np.load(self.MelStd_mel)
+            melspec = (melspec - mean) / std
+            melspec = np.transpose(melspec)
+            melspec = torch.from_numpy(melspec)
+
             assert melspec.size(0) == self.stft.n_mel_channels, (
                 'Mel dimension mismatch: given {}, expected {}'.format(
                     melspec.size(0), self.stft.n_mel_channels))
         return melspec
 
-    def get_text(self, filename):
-        file_path = os.path.join(self.text_dir, filename+'.lab')
-        text_norm = torch.IntTensor(text_to_sequence(file_path))
+    def get_text(self, fb):
+        text_norm = self.fb_text_dict[fb]
+        text_norm = torch.IntTensor([[phone2id[ph], tone2id[tn]] for ph, tn in text_norm])
         return text_norm
 
     def __getitem__(self, index):
-        return self.get_mel_text_pair(self.audiopaths_and_text[index])
+        return self.get_mel_text_pair(self.fbs[index])
 
     def __len__(self):
-        return len(self.audiopaths_and_text)
+        return len(self.fbs)
 
 
 class TextMelCollate():
@@ -87,8 +90,7 @@ class TextMelCollate():
             dim=0, descending=True)
         max_input_len = input_lengths[0]
 
-        # text_padded包括音素和音调
-        text_padded = torch.LongTensor(len(batch), max_input_len, 2)
+        text_padded = torch.LongTensor(len(batch), max_input_len, 2) ## phone, tone
         text_padded.zero_()
         for i in range(len(ids_sorted_decreasing)):
             text = batch[ids_sorted_decreasing[i]][0]
@@ -96,7 +98,7 @@ class TextMelCollate():
 
         # Right zero-pad mel-spec
         num_mels = batch[0][1].size(0)
-        max_target_len = max([x[1].size(1) for x in batch])
+        max_target_len = max([x[1].size(1) for x in batch]) 
         if max_target_len % self.n_frames_per_step != 0:
             max_target_len += self.n_frames_per_step - max_target_len % self.n_frames_per_step
             assert max_target_len % self.n_frames_per_step == 0
@@ -116,6 +118,7 @@ class TextMelCollate():
         return text_padded, input_lengths, mel_padded, gate_padded, \
             output_lengths
 
+
 if __name__ == "__main__":
     from hparams import create_hparams
     import matplotlib
@@ -124,7 +127,7 @@ if __name__ == "__main__":
     from model import Tacotron2
     from loss_function import Tacotron2Loss
     hparams = create_hparams()
-    text_loader = TextMelLoader(hparams.training_files, hparams)
+    text_loader = TextMelLoader(hparams.training_lst, hparams)
     collate_fn = TextMelCollate(hparams.n_frames_per_step)
 
     text, mel = text_loader[0] # mel.shape (80 * frame_num)
@@ -135,7 +138,7 @@ if __name__ == "__main__":
     train_loader = torch.utils.data.DataLoader(
                             text_loader, 
                             num_workers=1,  shuffle=False,
-                            batch_size=2,   pin_memory=False,
+                            batch_size=32,  pin_memory=False,
                             drop_last=True, collate_fn=collate_fn)
     print(len(train_loader))
     tacotron = Tacotron2(hparams)

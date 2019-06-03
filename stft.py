@@ -61,7 +61,7 @@ class STFT(torch.nn.Module):
             np.linalg.pinv(scale * fourier_basis).T[:, None, :])
 
         if window is not None:
-            assert(filter_length >= win_length)
+            assert(filter_length>=win_length)
             # get window and zero center pad it to filter_length
             fft_window = get_window(window, win_length, fftbins=True)
             fft_window = pad_center(fft_window, filter_length)
@@ -124,7 +124,6 @@ class STFT(torch.nn.Module):
                 np.where(window_sum > tiny(window_sum))[0])
             window_sum = torch.autograd.Variable(
                 torch.from_numpy(window_sum), requires_grad=False)
-            window_sum = window_sum.cuda() if magnitude.is_cuda else window_sum
             inverse_transform[:, :, approx_nonzero_indices] /= window_sum[approx_nonzero_indices]
 
             # scale by hop ratio

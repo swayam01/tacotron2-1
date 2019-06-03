@@ -3,7 +3,6 @@ import time
 import argparse
 import math
 from numpy import finfo
-from tqdm import tqdm
 
 import torch
 from distributed import apply_gradient_allreduce
@@ -16,11 +15,20 @@ from data_utils import TextMelLoader, TextMelCollate
 from loss_function import Tacotron2Loss
 from logger import Tacotron2Logger
 from hparams import create_hparams
+from tqdm import tqdm
+
+def batchnorm_to_float(module):
+    """Converts batch norm modules to FP32"""
+    if isinstance(module, torch.nn.modules.batchnorm._BatchNorm):
+        module.float()
+    for child in module.children():
+        batchnorm_to_float(child)
+    return module
 
 
 def reduce_tensor(tensor, n_gpus):
     rt = tensor.clone()
-    dist.all_reduce(rt, op=dist.reduce_op.SUM)
+    dist.all_reduce(rt, op=dist.ReduceOp.SUM)
     rt /= n_gpus
     return rt
 
@@ -42,18 +50,14 @@ def init_distributed(hparams, n_gpus, rank, group_name):
 
 def prepare_dataloaders(hparams):
     # Get data, data loaders and collate function ready
-    trainset = TextMelLoader(hparams.training_files, hparams)
-    valset = TextMelLoader(hparams.validation_files, hparams)
+    trainset = TextMelLoader(hparams.training_lst, hparams)
+    valset = TextMelLoader(hparams.validation_lst, hparams)
     collate_fn = TextMelCollate(hparams.n_frames_per_step)
 
-    if hparams.distributed_run:
-        train_sampler = DistributedSampler(trainset)
-        shuffle = False
-    else:
-        train_sampler = None
-        shuffle = True
+    train_sampler = DistributedSampler(trainset) \
+        if hparams.distributed_run else None
 
-    train_loader = DataLoader(trainset, num_workers=1, shuffle=shuffle,
+    train_loader = DataLoader(trainset, num_workers=1, shuffle=False,
                               sampler=train_sampler,
                               batch_size=hparams.batch_size, pin_memory=False,
                               drop_last=True, collate_fn=collate_fn)
@@ -82,18 +86,11 @@ def load_model(hparams):
     return model
 
 
-def warm_start_model(checkpoint_path, model, ignore_layers):
+def warm_start_model(checkpoint_path, model):
     assert os.path.isfile(checkpoint_path)
     print("Warm starting model from checkpoint '{}'".format(checkpoint_path))
     checkpoint_dict = torch.load(checkpoint_path, map_location='cpu')
-    model_dict = checkpoint_dict['state_dict']
-    if len(ignore_layers) > 0:
-        model_dict = {k: v for k, v in model_dict.items()
-                      if k not in ignore_layers}
-        dummy_dict = model.state_dict()
-        dummy_dict.update(model_dict)
-        model_dict = dummy_dict
-    model.load_state_dict(model_dict)
+    model.load_state_dict(checkpoint_dict['state_dict'])
     return model
 
 
@@ -111,7 +108,7 @@ def load_checkpoint(checkpoint_path, model, optimizer):
 
 
 def save_checkpoint(model, optimizer, learning_rate, iteration, filepath):
-    print("Saving model and optimizer state at iteration {} to {}".format(
+    tqdm.write("Saving model and optimizer state at iteration {} to {}".format(
         iteration, filepath))
     torch.save({'iteration': iteration,
                 'state_dict': model.state_dict(),
@@ -150,7 +147,6 @@ def validate(model, criterion, valset, iteration, batch_size, n_gpus,
 def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
           rank, group_name, hparams):
     """Training and validation logging results to tensorboard and stdout
-
     Params
     ------
     output_directory (string): directory to save checkpoints
@@ -204,10 +200,7 @@ def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
     model.train()
     is_overflow = False
     # ================ MAIN TRAINNIG LOOP! ===================
-    for epoch in tqdm(range(hparams.epochs)):
-        if epoch < epoch_offset:
-        	continue
-        tqdm.write("Epoch: {}".format(epoch))
+    for epoch in tqdm(range(epoch_offset, hparams.epochs)):
         for i, batch in tqdm(enumerate(train_loader), total = len(train_loader)):
             start = time.perf_counter()
             for param_group in optimizer.param_groups:
@@ -240,7 +233,7 @@ def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
 
             if not is_overflow and rank == 0:
                 duration = time.perf_counter() - start
-                tqdm.write("Epoch: {} Train loss {} {:.6f} Grad Norm {:.6f} {:.2f}s/it".format(
+                tqdm.write("Epoch {} Step {} Train loss {:.6f} Grad Norm {:.6f} {:.2f}s/it".format(
                     epoch, iteration, reduced_loss, grad_norm, duration))
                 logger.log_training(
                     reduced_loss, grad_norm, learning_rate, duration, iteration)

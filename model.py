@@ -38,7 +38,7 @@ class Attention(nn.Module):
         super(Attention, self).__init__()
         # 传统attention需要query和keys做线性变换再v^T.*tanh(W * query + V * keys)
         # 这个query_layer和memory_layer分别得到 W * query 和 V * keys
-        # w_init_gain='tanh'是因为他们包在tanh(W * query + V * keys)函数中吧
+        # w_init_gain='tanh'是因为他们包在tanh(W * query + V * keys)函数中
         self.query_layer = LinearNorm(attention_rnn_dim, attention_dim,
                                       bias=False, w_init_gain='tanh')
         self.memory_layer = LinearNorm(embedding_dim, attention_dim, bias=False,
@@ -98,7 +98,7 @@ class Attention(nn.Module):
         # bmm -> batch matrix multiply
         attention_context = torch.bmm(attention_weights.unsqueeze(1), memory)
         attention_context = attention_context.squeeze(1)
-        # attention_context (3,512) attention_context (3,72)
+        # attention_context (3,512) attention_weights (3,72)
         return attention_context, attention_weights
 
 
@@ -343,8 +343,10 @@ class Decoder(nn.Module):
         alignments:
         """
         # (T_out, B) -> (B, T_out)
+        # alignments (3,1000,72)
         alignments = torch.stack(alignments).transpose(0, 1)
         # (T_out, B) -> (B, T_out)
+        # gate_outputs (3,1000)
         gate_outputs = torch.stack(gate_outputs).transpose(0, 1)
         gate_outputs = gate_outputs.contiguous()
         # (T_out, B, n_mel_channels) -> (B, T_out, n_mel_channels)
@@ -355,6 +357,7 @@ class Decoder(nn.Module):
         mel_outputs = mel_outputs.view(
             mel_outputs.size(0), -1, self.n_mel_channels)
         # (B, T_out, n_mel_channels) -> (B, n_mel_channels, T_out)
+        # mel_outputs (3,80,1000)
         mel_outputs = mel_outputs.transpose(1, 2)
 
         return mel_outputs, gate_outputs, alignments
@@ -381,11 +384,13 @@ class Decoder(nn.Module):
         attention_weights_cat = torch.cat(
             (self.attention_weights.unsqueeze(1),
              self.attention_weights_cum.unsqueeze(1)), dim=1)
+        # self.attention_weights 相当于当前帧所对音素的目标单元
         self.attention_context, self.attention_weights = self.attention_layer(
             self.attention_hidden, self.memory, self.processed_memory,
             attention_weights_cat, self.mask)
 
         self.attention_weights_cum += self.attention_weights
+
         decoder_input = torch.cat(
             (self.attention_hidden, self.attention_context), -1)
         self.decoder_hidden, self.decoder_cell = self.decoder_rnn(
@@ -406,6 +411,7 @@ class Decoder(nn.Module):
         PARAMS
         ------
         memory: Encoder outputs
+        decoder_inputs: 文本对应的完整梅尔谱
         decoder_inputs: Decoder inputs for teacher forcing. i.e. mel-specs
         memory_lengths: Encoder output lengths for attention masking.
 
@@ -417,6 +423,7 @@ class Decoder(nn.Module):
         """
 
         decoder_input = self.get_go_frame(memory).unsqueeze(0)
+        # reshape decoder_inputs的维度
         decoder_inputs = self.parse_decoder_inputs(decoder_inputs)
         decoder_inputs = torch.cat((decoder_input, decoder_inputs), dim=0)
         decoder_inputs = self.prenet(decoder_inputs)
@@ -433,7 +440,6 @@ class Decoder(nn.Module):
             mel_outputs += [mel_output.squeeze(1)]
             gate_outputs += [gate_output.squeeze()]
             alignments += [attention_weights]
-
         mel_outputs, gate_outputs, alignments = self.parse_decoder_outputs(
             mel_outputs, gate_outputs, alignments)
 
@@ -487,14 +493,14 @@ class Tacotron2(nn.Module):
         self.n_frames_per_step = hparams.n_frames_per_step
 
         self.embedding_phoneme = nn.Embedding(
-            hparams.n_symbols_phoneme, hparams.symbols_phoneme_embedding_dim)
-        std = sqrt(2.0 / (hparams.n_symbols_phoneme + hparams.symbols_phoneme_embedding_dim))
+            hparams.n_symbols_phoneme, hparams.symbols_embedding_dim_phoneme)
+        std = sqrt(2.0 / (hparams.n_symbols_phoneme + hparams.symbols_embedding_dim_phoneme))
         val = sqrt(3.0) * std  # uniform bounds for std
         self.embedding_phoneme.weight.data.uniform_(-val, val)
 
         self.embedding_tone = nn.Embedding(
-            hparams.n_symbols_tone, hparams.symbols_tone_embedding_dim)
-        std = sqrt(2.0 / (hparams.n_symbols_tone + hparams.symbols_tone_embedding_dim))
+            hparams.n_symbols_tone, hparams.symbols_embedding_dim_tone)
+        std = sqrt(2.0 / (hparams.n_symbols_tone + hparams.symbols_embedding_dim_tone))
         val = sqrt(3.0) * std  # uniform bounds for std
         self.embedding_tone.weight.data.uniform_(-val, val)
         
@@ -529,6 +535,7 @@ class Tacotron2(nn.Module):
         return outputs
 
     def forward(self, inputs):
+        # mels是文本对应的完整梅尔谱
         text_inputs, text_lengths, mels, max_len, output_lengths = inputs
         text_lengths, output_lengths = text_lengths.data, output_lengths.data
 
