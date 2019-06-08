@@ -1,9 +1,7 @@
 import numpy as np
 import os
 
-cur_dir = os.path.dirname(os.path.abspath(__file__))
-
-phone_set = np.loadtxt(os.path.join(cur_dir, 'phoneme.lst'),'str')  # 61种phoneme
+phone_set = np.loadtxt('phoneme.lst','str')  # 61种phoneme
 
 phone2id = {ph:i for i,ph in enumerate(phone_set)}
 

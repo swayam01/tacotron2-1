@@ -30,23 +30,24 @@ Visit our [website] for audio samples using our published [Tacotron 2] and
     - Install python requirements: `pip install -r requirements.txt`
 
 ## Training
-1. `python train.py --output_directory=outdir --log_directory=logdir`
-2. (OPTIONAL) `tensorboard --logdir=outdir/logdir`
+1. `python train.py --output_directory=../outdir/model --log_directory=logdir`
+2. (OPTIONAL) `export TMPDIR=/tmp/$USER; mkdir -p $TMPDIR; python -c "import tempfile; print(tempfile.gettempdir())"`
+3. (OPTIONAL) `tensorboard --logdir=../outdir/model/logdir --port=6006`
 
 ## Training using a pre-trained model
 Training using a pre-trained model can lead to faster convergence  
 By default, the dataset dependent text embedding layers are [ignored]
 
 1. Download our published [Tacotron 2] model
-2. `python train.py --output_directory=outdir --log_directory=logdir -c tacotron2_statedict.pt --warm_start`
+2. `CUDA_VISIBLE_DEVICES=1 python train.py --output_directory=../outdir/model --log_directory=logdir -c ../outdir/original_Tactron2/checkpoint_180000 --warm_start`
 
 ## Multi-GPU (distributed) and Automatic Mixed Precision Training
-1. `python -m multiproc train.py --output_directory=outdir --log_directory=logdir --hparams=distributed_run=True,fp16_run=True`
+1. `python -m multiproc train.py --output_directory=../outdir/model --log_directory=logdir --hparams=distributed_run=True,fp16_run=True`
 
 ## Inference demo
 1. Download our published [Tacotron 2] model
 2. Download our published [WaveGlow] model
-3. `jupyter notebook --ip=127.0.0.1 --port=31337`
+3. `jupyter notebook --ip=172.16.46.101 --port=31337`
 4. Load inference.ipynb 
 
 N.b.  When performing Mel-Spectrogram to Audio synthesis, make sure Tacotron 2

@@ -25,12 +25,12 @@ def create_hparams(hparams_string=None, verbose=False):
         # Data Parameters              #
         ################################
         load_mel_from_disk=True,
-        training_lst='filelists/train_file.lst',
-        validation_lst='filelists/val_file.lst',
-        audio_path='data/audio',
-        mel_path='data/mel',
-        lab_path='data/text',
-        MelStd_mel ='data/MeanStd_Tacotron_mel.npy',
+        training_lst='../filelists/train_file.lst',
+        validation_lst='../filelists/val_file.lst',
+        audio_path='../data/audio',
+        mel_path='../data/mel',
+        lab_path='../data/text',
+        MelStd_mel ='../data/MeanStd_Tacotron_mel.npy',
 
         ################################
         # Audio Parameters             #
